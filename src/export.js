@@ -1,12 +1,12 @@
-const fs = require('fs');
-const path = require('path');
 const es = require('event-stream');
 const JSONStream = require('JSONStream');
+const axios = require('axios');
 const { parse: parseCSV } = require('@fast-csv/parse');
 
-const { exportConfig: config } = require('../config');
+const config = require('../config');
 const { passportTableSchema } = require('../schema');
 
+const API_URL = 'https://data.gov.ua/api/3';
 
 const csvOptions = {
     delimiter: ';',
@@ -40,6 +40,29 @@ const selectFields = (data, fields) => {
     return result;
 };
 
+const getLinks = async function * (datasetList) {
+    for (let datasetId of datasetList) {
+        const resp = await axios.get(`${API_URL}/action/package_show?id=${datasetId}`);
+        if (!resp.status === 200) {
+            console.warn(`Received ${resp.status} for dataset ${datasetId}`);
+            continue;
+        }
+        const resources = resp.data.result && resp.data.result.resources ? resp.data.result.resources : [];
+        if (!resources.length) {
+            console.warn(`Resouce list is empty for dataset ${datasetId}`);
+            continue;
+        }
+        for (let resource of resources) {
+            const resp = await axios.get(`${API_URL}/action/resource_show?id=${resource.id}`);
+            if (!resp.status === 200) {
+                console.warn(`Received ${resp.status} for resource ${resource.id}(${resource.name}) of dataset ${datasetId}`);
+                continue;
+            }
+            yield resp.data.result;
+        }
+    }
+};
+
 
 module.exports.getTable = async (bq) => {
     const exists = await bq.dataset(config.datasetID).table(config.tableID).exists();
@@ -50,33 +73,51 @@ module.exports.getTable = async (bq) => {
     return createTable(bq);
 };
 
+
 module.exports.exportToBQ = async (bq) => {
-    function selectFileParser (filename) {
-        const ext = path.extname(filename);
-        if (ext === '.json') return JSONStream.parse('*');
-        else if (ext === '.csv') return parseCSV(csvOptions);
+    const selectParser = (item) => {
+        if (item.mimetype === 'application/json') return JSONStream.parse('*');
+        else if (item.mimetype === 'text/csv') return parseCSV(csvOptions);
         return null;
-    }
+    };
+
+    const skipBOMChar = () => {
+        let completed = false;
+        return (data) => {
+            if (completed) return data;
+            let content = data.toString('utf8');
+            if (content.charAt(0) === '\uFEFF') {
+                content = content.substr(1);
+            }
+            completed = true;
+            return Buffer.from(content, 'utf8');
+        };
+    };
 
     const fields = passportTableSchema.map(el => el.name);
-    const files = fs.readdirSync(config.dataFolder);
     const uniqPassports = new Set();
+    const items = getLinks([config.sourceId]);
 
-
-    for (let file of files) {
-        const parser = selectFileParser(file);
+    for await (let item of items) {
+        const parser = selectParser(item);
         let transformFn;
 
-        if (!parser) continue;
-        console.log(`Streaming data from file ${file} to BQ table ${config.datasetID}.${config.tableID}`);
+        if (!parser) {
+            console.warn("No parsers found for item. Skip");
+            continue;
+        }
+        console.log(`Streaming resource ${item.name} to BQ table ${config.datasetID}.${config.tableID}`);
+        const resp = await axios({ method: "GET", responseType: 'stream', url: item.url });
+        const stream = resp.data;
+        stream.setEncoding(resp.responseEncoding);
 
-        const fStream = fs.createReadStream(path.join(config.dataFolder, file), { encoding: 'utf8' });
         const streamComplete = new Promise((resolve, reject) => {
-            fStream.on('close', resolve);
-            fStream.on('error', reject);
+            stream.on('close', resolve);
+            stream.on('error', reject);
         });
 
-        fStream
+        stream
+            .pipe(es.mapSync(skipBOMChar()))
             .pipe(parser)
             .pipe(es.mapSync((data) => {
                 if (!transformFn) {

@@ -1,8 +1,7 @@
-const fse = require('fs-extra');
 const { BigQuery } = require('@google-cloud/bigquery');
 
 const { exportToBQ, getTable } = require('../src/export');
-const { exportConfig: config } = require('../config');
+const config = require('../config');
 
 
 const getBqConfig = () => {
@@ -27,19 +26,20 @@ const getBqConfig = () => {
 
 const main = async () => {
     const bqConfig = getBqConfig();
-    if (Object.values(bqConfig).includes(undefined)) {
+    if (Object.values(bqConfig).includes(undefined) || !config.sourceId) {
         console.error('Required env options are missed. Unable to start');
         process.exit(1);
     }
+
+    // for await (let item of getLinks([config.sourceId])) {
+    //     console.log("Item is ", item.result.url);
+    // }
 
     const bq = new BigQuery(bqConfig);
 
     await getTable(bq);
     await exportToBQ(bq);
-    if (config.dropFiles) {
-        console.log('Cleaning up..');
-        fse.removeSync(config.dataFolder);
-    }
+
     console.log('Export completed!');
 };
 
