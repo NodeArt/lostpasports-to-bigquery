@@ -1,0 +1,26 @@
+env:
+  browser: true
+  commonjs: true
+  es6: true
+extends:
+  - standard
+globals:
+  Atomics: readonly
+  SharedArrayBuffer: readonly
+parserOptions:
+  ecmaVersion: 11
+rules:
+  semi:
+    - error
+    - always
+  comma-dangle:
+    - error
+    - always-multiline
+  prefer-promise-reject-errors: off
+  no-async-promise-executor: off
+  no-multiple-empty-lines: off
+  quotes: off
+  indent: 
+    - error
+    - 4
+  quote-props: off
