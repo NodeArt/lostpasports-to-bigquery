@@ -1,0 +1,65 @@
+name: export-to-bq
+on:
+  schedule:
+  - cron:  '0 11,16 * * *'
+jobs:
+  export-wanted-passports:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-node@v1
+    - run: npm ci
+    - run: npm run export
+      env: 
+        DATASET_NAME: ${{ secrets.DATASET_NAME }}
+        TABLE: wanted_passports
+        SOURCE_ID: ab09ed00-4f51-4f6c-a2f7-1b2fb118be0f
+        PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        CLIENT_EMAIL: ${{ secrets.CLIENT_EMAIL }}
+        PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+  export-invalid-passports:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-node@v1
+    - run: npm ci
+    - run: npm run export
+      env: 
+        DATASET_NAME: ${{ secrets.DATASET_NAME }}
+        TABLE: invalid_passports
+        SOURCE_ID: 44e1d462-5de4-40e5-b722-46f2aa9a1e81
+        PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        CLIENT_EMAIL: ${{ secrets.CLIENT_EMAIL }}
+        PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+  export-wanted-inter-passports:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-node@v1
+    - run: npm ci
+    - run: npm run export
+      env: 
+        DATASET_NAME: ${{ secrets.DATASET_NAME }}
+        TABLE: wanted_inter_passports
+        SOURCE_ID: b465b821-db5d-4b8b-8131-12682fab2203
+        PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        CLIENT_EMAIL: ${{ secrets.CLIENT_EMAIL }}
+        PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+  export-invalid-inter-passports:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-node@v1
+    - run: npm ci
+    - run: npm run export
+      env: 
+        DATASET_NAME: ${{ secrets.DATASET_NAME }}
+        TABLE: invalid_inter_passports
+        SOURCE_ID: 672e0841-e1a2-47ec-b8d4-22839c71f4b3
+        PROJECT_ID: ${{ secrets.PROJECT_ID }}
+        CLIENT_ID: ${{ secrets.CLIENT_ID }}
+        CLIENT_EMAIL: ${{ secrets.CLIENT_EMAIL }}
+        PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
