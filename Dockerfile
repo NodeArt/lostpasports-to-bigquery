@@ -97,7 +97,7 @@ RUN --mount=type=bind,source=package.json,target=package.json \
     --mount=type=bind,source=schema.js,target=schema.js \
     npm run export
 
-FROM scratch AS copy-reports
+FROM scratch AS jobs-done
 COPY --from=export-wanted-passports /tmp /tmp
 COPY --from=export-invalid-passports /tmp /tmp
 COPY --from=export-wanted-intern-passports /tmp /tmp
