@@ -1,9 +1,8 @@
 name: run-export
-on:
-  schedule:
-  - cron:  '0 11,16 * * *'
+on: [push]
 jobs:
-  runs-on: ubuntu-20.04
+  buildx:
+    runs-on: ubuntu-20.04
     steps:
       - name: 'Checkout the source code'
         uses: actions/checkout@v2
