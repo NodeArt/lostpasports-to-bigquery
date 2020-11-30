@@ -37,8 +37,13 @@ const main = async () => {
 
     const bq = new BigQuery(bqConfig);
 
-    await getTable(bq);
-    await exportToBQ(bq);
+    try {
+        await getTable(bq);
+        await exportToBQ(bq);
+    } catch (e) {
+        console.log(e);
+        process.exit(1);
+    }
 
     console.log('Export completed!');
 };
