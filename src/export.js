@@ -1,10 +1,16 @@
 const es = require('event-stream');
 const JSONStream = require('JSONStream');
 const axios = require('axios');
+const rax = require('retry-axios');
 const { parse: parseCSV } = require('@fast-csv/parse');
+const { promisify } = require("util");
+
+let { pipeline } = require("stream");
+pipeline = promisify(pipeline);
 
 const config = require('../config');
 const { passportTableSchema } = require('../schema');
+const AxiosRetryStream = require("./utils/retry-stream");
 
 const API_URL = 'https://data.gov.ua/api/3';
 
@@ -41,8 +47,22 @@ const selectFields = (data, fields) => {
 };
 
 const getLinks = async function * (datasetList) {
+    const client = axios.create({ timeout: config.requestTimeout });
+    client.defaults.raxConfig = {
+        instance: client,
+        retry: config.requestMaxRetries,
+        noResponseRetries: config.requestMaxRetries,
+        backoffType: "static",
+        retryDelay: config.requestRetryDelay,
+        onRetryAttempt: err => {
+            const cfg = rax.getConfig(err);
+            console.log(`Retry attempt #${cfg.currentRetryAttempt}`);
+        },
+    };
+    const interceptorId = rax.attach(client);
+
     for (let datasetId of datasetList) {
-        const resp = await axios.get(`${API_URL}/action/package_show?id=${datasetId}`);
+        const resp = await client.request(`${API_URL}/action/package_show?id=${datasetId}`);
         if (!resp.status === 200) {
             console.warn(`Received ${resp.status} for dataset ${datasetId}`);
             continue;
@@ -53,7 +73,7 @@ const getLinks = async function * (datasetList) {
             continue;
         }
         for (let resource of resources) {
-            const resp = await axios.get(`${API_URL}/action/resource_show?id=${resource.id}`);
+            const resp = await client.request(`${API_URL}/action/resource_show?id=${resource.id}`);
             if (!resp.status === 200) {
                 console.warn(`Received ${resp.status} for resource ${resource.id}(${resource.name}) of dataset ${datasetId}`);
                 continue;
@@ -85,18 +105,22 @@ module.exports.exportToBQ = async (bq) => {
         let completed = false;
         return (data) => {
             if (completed) return data;
-            let content = data.toString('utf8');
+            const content = data.toString('utf8');
             if (content.charAt(0) === '\uFEFF') {
-                content = content.substr(1);
+                const buff = Buffer.allocUnsafe(data.length - 3);
+                data.copy(buff, 0, 3);
+                data = buff;
             }
             completed = true;
-            return Buffer.from(content, 'utf8');
+            return data;
         };
     };
 
     const fields = passportTableSchema.map(el => el.name);
     const uniqPassports = new Set();
     const items = getLinks([config.sourceId]);
+
+    let cnt = 0;
 
     for await (let item of items) {
         const parser = selectParser(item);
@@ -107,19 +131,17 @@ module.exports.exportToBQ = async (bq) => {
             continue;
         }
         console.log(`Streaming resource ${item.name} to BQ table ${config.datasetID}.${config.tableID}`);
-        const resp = await axios({ method: "GET", responseType: 'stream', url: item.url });
-        const stream = resp.data;
-        stream.setEncoding(resp.responseEncoding);
+        const retryStream = new AxiosRetryStream(
+            { method: "GET", url: item.url },
+            { maxRetries: config.requestMaxRetries, retryDelay: config.requestRetryDelay, streamTimeout: config.streamTimeout },
+        );
+        const stream = await retryStream.makeRequest();
 
-        const streamComplete = new Promise((resolve, reject) => {
-            stream.on('close', resolve);
-            stream.on('error', reject);
-        });
-
-        stream
-            .pipe(es.mapSync(skipBOMChar()))
-            .pipe(parser)
-            .pipe(es.mapSync((data) => {
+        await pipeline(
+            stream,
+            es.mapSync(skipBOMChar()),
+            parser,
+            es.mapSync((data) => {
                 if (!transformFn) {
                     transformFn = typeof data.D_SERIES !== 'undefined' ? transformFromDFields : data => data;
                 }
@@ -128,11 +150,15 @@ module.exports.exportToBQ = async (bq) => {
                 if (!item) return; // Drop items with wrong fields
                 const ln = uniqPassports.size;
                 if (uniqPassports.add(item.series + item.number).size === ln) return; // Drop non-unique item
+
+                cnt++;
+                if (cnt % 10000 === 0) console.log(`${cnt} items processed`);
+
                 return JSON.stringify(item) + '\n';
-            }))
-            .pipe(bq.dataset(config.datasetID).table(config.tableID).createWriteStream({
+            }),
+            bq.dataset(config.datasetID).table(config.tableID).createWriteStream({
                 sourceFormat: 'NEWLINE_DELIMITED_JSON',
-            }));
-        await streamComplete;
+            }),
+        );
     }
 };
