@@ -66,15 +66,23 @@ class RetryStream {
     }
 
     makePipe (readableStream) {
-        readableStream.on("data", this.writeData);
-        readableStream.on("end", () => {
+        const onStreamEnd = () => {
             if (!this.hasMoreData()) {
                 this.completed = true;
-                return this.entryStream.end();
+                if (!this.entryStream.writableEnded) this.entryStream.end();
+                return;
             }
-            this.readableStream = null;
-            this.makeRequest().catch(e => {});
-        });
+            if (this.readableStream) {
+                this.readableStream = null;
+                this.makeRequest().catch(e => {});
+            }
+        };
+
+        readableStream.on("data", this.writeData);
+        readableStream.on("end", onStreamEnd);
+        readableStream.on("close", onStreamEnd);
+        readableStream.on("error", (e) => { console.log("Stream error", e); });
+
         this.readableStream = readableStream;
         this.lastUpdate = new Date();
         this.addStreamTimeout(readableStream);
@@ -95,7 +103,10 @@ class RetryStream {
 
     addStreamTimeout (stream) {
         const id = setInterval(() => {
-            if (new Date() - this.lastUpdate > this.streamTimeout) stream.destroy();
+            if (new Date() - this.lastUpdate > this.streamTimeout) {
+                stream.destroy();
+                console.log("Stream destroyed on timeout");
+            }
         }, this.streamTimeout);
         stream.on("end", () => clearInterval(id));
         stream.on("close", () => clearInterval(id));
