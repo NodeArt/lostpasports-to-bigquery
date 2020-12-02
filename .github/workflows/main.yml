@@ -1,5 +1,7 @@
 name: run-export
-on: [push]
+on:
+  schedule:
+  - cron:  '0 5,23 * * *'
 jobs:
   buildx:
     runs-on: ubuntu-20.04
@@ -28,6 +30,7 @@ jobs:
             --build-arg CLIENT_EMAIL=${{ secrets.CLIENT_EMAIL }} \
             --build-arg PRIVATE_KEY=${{ secrets.PRIVATE_KEY }} \
             --build-arg DATASET_NAME=${{ secrets.DATASET_NAME }} \
+            --build-arg RUN_ID=${{ github.run_id }} \
             --target "jobs-done" \
             --file "./Dockerfile" \
             "./"

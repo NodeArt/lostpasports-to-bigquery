@@ -19,7 +19,6 @@ ENV BASIC_DEPS='ca-certificates apt-transport-https curl' \
     BUILD_DEPS='build-essential g++ python make git gnupg' \
     CWEBP_DEPS='libglu1 libxi6 libjpeg62 libpng16-16'
 ENV DEPS="${BASIC_DEPS} ${BUILD_DEPS} ${CWEBP_DEPS}"
-
 RUN --mount=type=cache,target=/var/cache/apt,id=apt-cache_cache,sharing=locked \
     --mount=type=cache,target=/var/cache/debconf,id=debconf-cache_cache,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,id=apt-lib_cache,sharing=locked \
@@ -30,16 +29,13 @@ RUN --mount=type=cache,target=/root/.npm,id=npm_cache,sharing=locked \
     --mount=type=cache,target=/tmp,id=npm_releases,sharing=locked \
     npm --prefer-offline install npm --global --silent
 
-FROM install-latest-npm AS list-npm-settings
-ARG INVALIDATE_CACHE
-RUN npm config list --json > npm.json
-
 FROM install-latest-npm AS prepare-export-environment
 ARG CLIENT_ID
 ARG CLIENT_EMAIL
 ARG PRIVATE_KEY
 ARG PROJECT_ID
 ARG DATASET_NAME
+ARG RUN_ID
 ENV NODE_ENV='production'
 
 FROM prepare-export-environment AS install-project-dependencies
@@ -102,3 +98,18 @@ COPY --from=export-wanted-passports /tmp /tmp
 COPY --from=export-invalid-passports /tmp /tmp
 COPY --from=export-wanted-intern-passports /tmp /tmp
 COPY --from=export-invalid-intern-passports /tmp /tmp
+
+LABEL org.opencontainers.image.description="" \
+      org.opencontainers.image.is-production="true" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.component="bq" \
+      org.opencontainers.image.repository="" \
+      org.opencontainers.image.project="" \
+      org.opencontainers.image.namespace="" \
+      org.opencontainers.image.registry="" \
+      org.opencontainers.image.vendor="" \
+      org.opencontainers.image.documentation="https://github.com" \
+      org.opencontainers.image.source="https://github.com" \
+      org.opencontainers.image.url="https://github.com" \
+      org.opencontainers.image.title="" \
+      org.opencontainers.image.licenses=""
