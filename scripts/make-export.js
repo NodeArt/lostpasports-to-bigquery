@@ -5,45 +5,39 @@ const config = require('../config');
 
 
 const getBqConfig = () => {
-    if (config.bqAuthKeyFile) {
+    const { projectId, clientId, clientEmail, privateKey } = config.bqCredents;
+
+    if (config.bqAuthKeyFile && projectId) {
         return {
-            projectId: config.projectId,
+            projectId,
             keyFilename: config.bqAuthKeyFile,
         };
-    } else {
-        return {
-            projectId: config.projectId,
-            credentials: {
-                client_email: config.clientEmail,
-                private_key: decodeURI(config.privateKey),
-            },
-            clientOptions: {
-                clientId: config.clientId,
-            },
-        };
-    }
+    } else if (Object.values(config.bqCredents).includes(undefined)) return;
+
+    return {
+        projectId,
+        credentials: {
+            client_email: clientEmail,
+            private_key: decodeURI(privateKey),
+        },
+        clientOptions: {
+            clientId,
+        },
+    };
 };
 
 const main = async () => {
     const bqConfig = getBqConfig();
-    if (Object.values(bqConfig).includes(undefined) || !config.sourceId) {
+    if (!bqConfig || !config.sourceId) {
         console.error('Required env options are missed. Unable to start');
         process.exit(1);
     }
 
-    // for await (let item of getLinks([config.sourceId])) {
-    //     console.log("Item is ", item.result.url);
-    // }
-
     const bq = new BigQuery(bqConfig);
 
-    try {
-        await getTable(bq);
-        await exportToBQ(bq);
-    } catch (e) {
-        console.log(e);
-        process.exit(1);
-    }
+    await getTable(bq);
+    await exportToBQ(bq);
+
 
     console.log('Export completed!');
 };
