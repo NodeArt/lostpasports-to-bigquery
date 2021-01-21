@@ -34,3 +34,15 @@ jobs:
             --target "jobs-done" \
             --file "./Dockerfile" \
             "./"
+      - name: 'Error reporting'
+        if: ${{ failure() }}
+        uses: dawidd6/action-send-mail@v2
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_SERVER_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: ${{ github.repository }} job#${{ github.run_number }} failed!
+          body: ${{github.server_url}}/${{ github.repository }}/actions
+          to: ${{ secrets.MAIL_LIST }}
+          from: Alert bot
